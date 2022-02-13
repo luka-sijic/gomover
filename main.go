@@ -13,10 +13,13 @@ import (
 // File struct - store files in a slice
 type filestore struct {
 	directory string
+	destination string
 	filepaths []string
 	flagList []flags
 	include []string
 	exclude []string
+	unsafe bool
+	hide bool
 }
 
 type flags struct {
@@ -26,7 +29,7 @@ type flags struct {
 
 // List of valid arguments/flags
 func argList() []string {
-	return []string{"-e", "-i", "-m"}
+	return []string{"-e", "-i", "-u", "-x"}
 }
 
 // Check if an argument contains a valid flag
@@ -51,13 +54,30 @@ func checkIncludes(excludes []string, value string) bool {
 
 func main() {
 	f := filestore{}
-	options(&f)
+	if len(os.Args) > 3 {
+		options(&f)
+	} else if os.Args[1] == "-h" {
+		fmt.Println("Usage: gomover [directory source] [destination directory] [option] [string]...")
+		fmt.Println(" -e, --exclude <string>...<string> Excludes all files that contain the provided strings")
+		fmt.Println(" -i, --include <string>...<string> Includes all files that contain the provided strings")
+		fmt.Println(" -x, --hide                        Hides all excluded files for use in large directories")
+		fmt.Println(" -u, --unsafe                      Does not ask before moving files, be cautious when using this flag")
+		return
+	} else {
+		fmt.Println("gomover: try 'gomover -h' for more information")
+		return
+	}
 	//fmt.Printf("Length of os.arguments %d\n", len(os.Args))
-	color.Set(color.BgMagenta)
+	color.Set(color.BgCyan)
 	fmt.Printf("Directory: %s\n", f.directory)
+	color.Unset()
+	color.Set(color.BgBlue)
+	fmt.Printf("Directory: %s\n", f.destination)
 	color.Unset()
 
 	crawl(&f)
+
+	fmt.Println(f.flagList)
 
 	for i := range f.flagList {
 		switch f.flagList[i].flagName {
@@ -65,7 +85,16 @@ func main() {
 			f.exclude = move(&f, f.flagList[i].flagValues)
 		case "-i":
 			f.include = move(&f, f.flagList[i].flagValues)
+		case "-x":
+			f.hide = true
+		case "-u":
+			f.unsafe = true
 		}
+	}
+
+	if len(f.include) == 0 {
+		fmt.Println("No files found with the given flags")
+		return
 	}
 
 	fmt.Println("Files to Include: ")
@@ -74,12 +103,14 @@ func main() {
 		fmt.Println(f.include[i])
 	}
 	color.Unset()
-	fmt.Println("Files to Exclude: ")
-	color.Set(color.FgRed)
-	for i := range f.exclude {
-		fmt.Println(f.exclude[i])
+	if f.hide != true {
+		fmt.Println("Files to Exclude: ")
+		color.Set(color.FgRed)
+		for i := range f.exclude {
+			fmt.Println(f.exclude[i])
+		}
+		color.Unset()
 	}
-	color.Unset()
 	
 	var final []string 
 	for i := range f.include {
@@ -95,13 +126,31 @@ func main() {
 	}
 	color.Unset()
 
+	if f.unsafe == false {
+		var option string
+		fmt.Print("Would you like to move these files(y/n)?\n> ")
+		fmt.Scanln(&option)
+		if option == "y" {
+			execute(&f, final)
+		} else {
+			fmt.Println("User cancelled move")
+			return
+		}
+	} else {
+		execute(&f, final)
+	}
+
+	
+
 }
 
-func movez(files []string, index int) {
-	cmd := exec.Command("mv", files[index], "")
-	err := cmd.Run()
-	if err != nil {
-		log.Fatal(err)
+func execute(f *filestore, final []string) {
+	for i := range final {
+		cmd := exec.Command("mv", final[i], f.destination)
+		err := cmd.Run()
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 
@@ -132,47 +181,45 @@ func crawl(f *filestore) {
 }
 
 func options(f *filestore) {
-	if len(os.Args) > 3 {
-		f.directory = os.Args[1]
-		for i := 2; i < len(os.Args);i++ {
-			//fmt.Printf("main for loop index: %d\n", i)
-			if contains(os.Args[i], argList()) {
-				flag := flags{}
-				flag.flagName = os.Args[i]
-				temp := make([]string, 0)
-				j := i
-				for y := i; y < len(os.Args);y++ {
-					//fmt.Printf("J condition: %d\n", j)
-					if j < len(os.Args)-1 {
-						if contains(os.Args[j+1], argList()) == false {
-							temp = append(temp, os.Args[y])
-							//fmt.Println("TO ADD: " + os.Args[y])
-							j++
-						} else {
-							temp = append(temp, os.Args[y])
-							//fmt.Println(os.Args[y])
-							break
-						}
+	f.directory = os.Args[1]
+	f.destination = os.Args[2]
+	for i := 3; i < len(os.Args);i++ {
+		//fmt.Printf("main for loop index: %d\n", i)
+		if contains(os.Args[i], argList()) {
+			flag := flags{}
+			flag.flagName = os.Args[i]
+			temp := make([]string, 0)
+			j := i
+			for y := i; y < len(os.Args);y++ {
+				//fmt.Printf("J condition: %d\n", j)
+				if j < len(os.Args)-1 {
+					if contains(os.Args[j+1], argList()) == false {
+						temp = append(temp, os.Args[y])
+						//fmt.Println("TO ADD: " + os.Args[y])
+						j++
 					} else {
 						temp = append(temp, os.Args[y])
+						//fmt.Println(os.Args[y])
+						break
 					}
+				} else {
+					temp = append(temp, os.Args[y])
 				}
-				flag.flagValues = temp[1:]
-				f.flagList = append(f.flagList, flag)
 			}
+			flag.flagValues = temp[1:]
+			f.flagList = append(f.flagList, flag)
 		} 
-	} else {
-		fmt.Println("Not enough arguments provided, add -h for help")
-	}
+	} 
 }
 
 
 /*
 TODO:
-	binary <dir to crawl> 
+	binary <dir to crawl> <dir to move files to> <flag> <string> ...
 	options:
 		-e string1 string2 string3 <SHOWS ALL FILES THAT DO NOT HAVE THIS STRING IN THEIR NAME>
 		-i extension1 extension2 extension3 <SHOWS ALL FILES THAT DO CONTAIN THIS STRING IN THEIR NAME>
+		-u unsafe, does not ask before the program moves the files
 
 	possibilities:
 		binary ./ -e !q -i mp4 mkv
