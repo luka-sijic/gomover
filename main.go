@@ -1,0 +1,182 @@
+package main
+
+import (
+	"fmt"
+	"log"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"github.com/fatih/color"
+)
+
+// File struct - store files in a slice
+type filestore struct {
+	directory string
+	filepaths []string
+	flagList []flags
+	include []string
+	exclude []string
+}
+
+type flags struct {
+	flagName string 
+	flagValues []string
+}
+
+// List of valid arguments/flags
+func argList() []string {
+	return []string{"-e", "-i", "-m"}
+}
+
+// Check if an argument contains a valid flag
+func contains(arg string, list []string) bool {
+	for i := range list {
+		if strings.Contains(arg, list[i]) == true {
+			return true
+		} 
+	}
+	return false
+}
+
+// Check for dupe
+func checkIncludes(excludes []string, value string) bool {
+	for i := range excludes {
+		if value == excludes[i] {
+			return true
+		}
+	}
+	return false
+}
+
+func main() {
+	f := filestore{}
+	options(&f)
+	//fmt.Printf("Length of os.arguments %d\n", len(os.Args))
+	color.Set(color.BgMagenta)
+	fmt.Printf("Directory: %s\n", f.directory)
+	color.Unset()
+
+	crawl(&f)
+
+	for i := range f.flagList {
+		switch f.flagList[i].flagName {
+		case "-e":
+			f.exclude = move(&f, f.flagList[i].flagValues)
+		case "-i":
+			f.include = move(&f, f.flagList[i].flagValues)
+		}
+	}
+
+	fmt.Println("Files to Include: ")
+	color.Set(color.FgGreen)
+	for i := range f.include {
+		fmt.Println(f.include[i])
+	}
+	color.Unset()
+	fmt.Println("Files to Exclude: ")
+	color.Set(color.FgRed)
+	for i := range f.exclude {
+		fmt.Println(f.exclude[i])
+	}
+	color.Unset()
+	
+	var final []string 
+	for i := range f.include {
+		if checkIncludes(f.exclude, f.include[i]) == false {
+			final = append(final, f.include[i])
+		}
+	}
+
+	fmt.Println("Final List of Files: ")
+	color.Set(color.FgCyan)
+	for i := range final {
+		fmt.Println(final[i])
+	}
+	color.Unset()
+
+}
+
+func movez(files []string, index int) {
+	cmd := exec.Command("mv", files[index], "")
+	err := cmd.Run()
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func move(f *filestore, v []string) []string {
+	var temp []string
+	for i := range f.filepaths {
+		if contains(f.filepaths[i], v) {
+			temp = append(temp, f.filepaths[i])
+		} 
+	}
+	return temp
+}
+
+func crawl(f *filestore) {
+	err := filepath.Walk(f.directory, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			log.Fatal(err)
+		}
+		if info.IsDir() == false {
+			f.filepaths = append(f.filepaths, path)
+		}
+		//fmt.Printf("dir: %v: name %s\n", info.IsDir(), path)
+		return nil
+	})
+	if err != nil {
+		fmt.Println(err)
+	}
+}
+
+func options(f *filestore) {
+	if len(os.Args) > 3 {
+		f.directory = os.Args[1]
+		for i := 2; i < len(os.Args);i++ {
+			//fmt.Printf("main for loop index: %d\n", i)
+			if contains(os.Args[i], argList()) {
+				flag := flags{}
+				flag.flagName = os.Args[i]
+				temp := make([]string, 0)
+				j := i
+				for y := i; y < len(os.Args);y++ {
+					//fmt.Printf("J condition: %d\n", j)
+					if j < len(os.Args)-1 {
+						if contains(os.Args[j+1], argList()) == false {
+							temp = append(temp, os.Args[y])
+							//fmt.Println("TO ADD: " + os.Args[y])
+							j++
+						} else {
+							temp = append(temp, os.Args[y])
+							//fmt.Println(os.Args[y])
+							break
+						}
+					} else {
+						temp = append(temp, os.Args[y])
+					}
+				}
+				flag.flagValues = temp[1:]
+				f.flagList = append(f.flagList, flag)
+			}
+		} 
+	} else {
+		fmt.Println("Not enough arguments provided, add -h for help")
+	}
+}
+
+
+/*
+TODO:
+	binary <dir to crawl> 
+	options:
+		-e string1 string2 string3 <SHOWS ALL FILES THAT DO NOT HAVE THIS STRING IN THEIR NAME>
+		-i extension1 extension2 extension3 <SHOWS ALL FILES THAT DO CONTAIN THIS STRING IN THEIR NAME>
+
+	possibilities:
+		binary ./ -e !q -i mp4 mkv
+
+	additions:
+		faster searching methods
+*/
