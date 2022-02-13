@@ -54,8 +54,9 @@ func checkIncludes(excludes []string, value string) bool {
 
 func main() {
 	f := filestore{}
-	if len(os.Args) > 3 {
-		options(&f)
+	if len(os.Args) == 1 {
+		fmt.Println("gomover: try 'gomover -h' for more information")
+		return
 	} else if os.Args[1] == "-h" {
 		fmt.Println("Usage: gomover [directory source] [destination directory] [option] [string]...")
 		fmt.Println(" -e, --exclude <string>...<string> Excludes all files that contain the provided strings")
@@ -63,10 +64,8 @@ func main() {
 		fmt.Println(" -x, --hide                        Hides all excluded files for use in large directories")
 		fmt.Println(" -u, --unsafe                      Does not ask before moving files, be cautious when using this flag")
 		return
-	} else {
-		fmt.Println("gomover: try 'gomover -h' for more information")
-		return
-	}
+	} 
+	options(&f)
 	//fmt.Printf("Length of os.arguments %d\n", len(os.Args))
 	color.Set(color.BgCyan)
 	fmt.Printf("Directory: %s\n", f.directory)
